@@ -7,16 +7,18 @@ from torch.distributed import init_process_group, destroy_process_group, get_wor
 
 from .backend import DistributedBackend
 
-
-class DataParallelDistributedBackend(DistributedBackend):
+class ModelParallelDistributedBackend(DistributedBackend):
 
     def __init__(self, args):
-        self.rank = int(os.environ.get('RANK', -1))
-        assert self.rank != -1, "DDP backend can not be used without rank"
-        assert "cuda" in args.device, "DDP backend can not be used on non-CUDA devices"
-        init_process_group(backend=args.distributed_backend)
-        self.local_rank = int(os.environ['LOCAL_RANK'])
+        os.environ['MASTER_ADDR'] = args.master_addr
+        os.environ['MASTER_PORT'] = args.master_port
 
+        self.rank = args.rank
+        assert self.rank != -1, "MP backend can not be used without rank"
+        assert "cuda" in args.device, "MP backend can not be used on non-CUDA devices"
+        init_process_group(backend=args.distributed_backend, rank=args.rank, world_size=args.world_size)
+        self.local_rank = args.rank
+    
     def get_adjusted_args_for_process(self, args):
         effective_batch_size = args.batch_size * args.acc_steps
         world_size = self.get_world_size()
@@ -24,15 +26,16 @@ class DataParallelDistributedBackend(DistributedBackend):
             raise ValueError(f"Effective batch size "
                              "{effective_batch_size} is not divisible "
                              "by the world size {world_size}.")
-        acc_steps_div = math.gcd(args.acc_steps, world_size)
-        args.acc_steps = args.acc_steps // acc_steps_div
-        args.batch_size = args.batch_size // (world_size // acc_steps_div)
+        args.acc_steps = args.acc_steps
+        args.batch_size = args.batch_size 
         args.device = f'cuda:{self.local_rank}'
-        args.seed = args.seed + self.local_rank
+        args.seed = args.seed
         return args
 
     def transform_model(self, model):
-        return DDP(model, device_ids=[self.local_rank])
+        model = model.to(f'cuda:{self.local_rank}')
+        # return DDP(model, device_ids=[self.local_rank]) # model.to(f'cuda:{self.local_rank}')
+        return model
 
     @contextmanager
     def get_context_for_microstep_forward(self, model, microstep_idx, gradient_accumulation_steps):
@@ -54,7 +57,3 @@ class DataParallelDistributedBackend(DistributedBackend):
 
     def finalize(self):
         destroy_process_group()
-
-
-
-

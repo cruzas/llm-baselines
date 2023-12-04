@@ -1,9 +1,11 @@
 
 from . import ddp
+from . import gloo_ddp
 from . import single
 
 BACKEND_TYPE_TO_MODULE_MAP = {
     "nccl": ddp.DataParallelDistributedBackend,
+    "gloo": gloo_ddp.ModelParallelDistributedBackend,
     None: single.SinlgeNodeBackend,
 }
 

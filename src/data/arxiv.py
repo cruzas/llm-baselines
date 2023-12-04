@@ -10,7 +10,7 @@ from typing import Tuple, List
 
 import numpy as np
 import requests
-from tqdm.auto import tqdm
+from tqdm.auto import tqdm # pip install tqdm
 import tiktoken
 
 

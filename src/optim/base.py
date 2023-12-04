@@ -2,7 +2,6 @@ from contextlib import nullcontext
 
 import torch
 import torch.nn.functional as F
-import wandb
 import time 
 import copy
 
@@ -19,9 +18,9 @@ def train_base(model, opt, data, scheduler, iterations, acc_steps, batch_size, s
 
     num_substeps_per_epoch = len(data['train']) // (batch_size * sequence_length)
     
-    if not extra_args.no_compile:
-        print(f"Compiling model ...")
-        model = torch.compile(model) # requires pytorch 2.0+
+    # if not extra_args.no_compile:
+    #     print(f"Compiling model ...")
+    #     model = torch.compile(model) # requires pytorch 2.0+
 
     model.train()
 
@@ -33,14 +32,19 @@ def train_base(model, opt, data, scheduler, iterations, acc_steps, batch_size, s
                 with distributed_backend.get_context_for_microstep_forward(model=model, microstep_idx=microstep_idx, gradient_accumulation_steps=acc_steps):
                     outputs = model(x, targets=y)
 
+            
             loss = outputs['loss'] / acc_steps
             loss.backward()
             substep += 1
 
         if extra_args.grad_clip != 0.0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), extra_args.grad_clip)
-        opt.step()
-        scheduler.step()
+        
+        if 'apts' in opt.__class__.__name__.lower() and 'w' in opt.__class__.__name__.lower():
+            opt.step(x, y)
+        else:
+            opt.step()
+        # scheduler.step()
         opt.zero_grad(set_to_none=True)
         itr += 1
 
@@ -61,26 +65,6 @@ def train_base(model, opt, data, scheduler, iterations, acc_steps, batch_size, s
                 if scheduler is not None:
                     print_string += f" [lr] {current_lr:.5f}"
                 print(print_string)
-
-                if extra_args.wandb:
-                    wandb.log({
-                        "iter": itr,
-                        "train/loss": train_loss,
-                        "val/loss": val_loss,
-                        "val/perplexity": val_perplexity,
-                        "val/acc": val_acc,
-                        "lr": current_lr,
-                    })
-
-                    if extra_args.eval_seq_prefix != 'none' and (itr % (eval_freq * 5) == 0 or itr == iterations):
-                        if text_table is None:
-                            text_table = wandb.Table(columns=["itr", "val-pp", "text"])
-
-                        out_str = distributed_backend.get_raw_model(model).generate_from_string(
-                            extra_args.eval_seq_prefix, max_new_tokens=40, temperature=0.9, top_k=None)
-                        text_table.add_data(itr, val_perplexity, out_str)
-                        # why a copy? see github.com/wandb/wandb/issues/2981
-                        wandb.log({f"generated-text-{wandb.run.name}": copy.copy(text_table)})
 
                 model.train()
                 t0 = time.time()
