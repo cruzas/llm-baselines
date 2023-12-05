@@ -145,18 +145,18 @@ class APTS_W(Optimizer):
     
 
     def closure(self, inputs, targets, model):
-        model.zero_grad()
         dict = model(inputs,targets,False)
         J = dict['loss'] 
         if torch.is_grad_enabled():
+            model.zero_grad()
             J.backward()
         return J.item()
     
     def global_closure(self, inputs, targets):
-        self.global_model.zero_grad()
         dict = self.global_model(inputs,targets,False)
         J = dict['loss']
         if torch.is_grad_enabled():
+            self.global_model.zero_grad()
             J.backward()
         return J.item()
         
