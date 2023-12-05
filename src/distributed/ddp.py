@@ -25,14 +25,16 @@ class DataParallelDistributedBackend(DistributedBackend):
                              "{effective_batch_size} is not divisible "
                              "by the world size {world_size}.")
         acc_steps_div = math.gcd(args.acc_steps, world_size)
-        args.acc_steps = args.acc_steps // acc_steps_div
-        args.batch_size = args.batch_size // (world_size // acc_steps_div)
-        args.device = f'cuda:{self.local_rank}'
+        args.acc_steps = args.acc_steps 
+        args.batch_size = args.batch_size 
+        args.device = f'cuda:0'
         args.seed = args.seed + self.local_rank
         return args
 
     def transform_model(self, model):
-        return DDP(model, device_ids=[self.local_rank])
+        model = model.to(f'cuda:0')
+        # return DDP(model, device_ids=[self.local_rank])
+        return model
 
     @contextmanager
     def get_context_for_microstep_forward(self, model, microstep_idx, gradient_accumulation_steps):
