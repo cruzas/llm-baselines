@@ -2,7 +2,7 @@
 src/data/datasets/
 wandb/
 exps/
-scripts/
+scripts/main.job
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
