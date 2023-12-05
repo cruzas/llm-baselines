@@ -2,9 +2,9 @@ import numpy as np
 from typing import Dict
 
 from .shakespeare import get_shakespeare_data
-from .wikitext import get_wikitext_data
-from .arxiv import get_arxiv_2000, get_arxiv_full
-from .openwebtext2 import get_openwebtext2_data
+#from .wikitext import get_wikitext_data
+#from .arxiv import get_arxiv_2000, get_arxiv_full
+#from .openwebtext2 import get_openwebtext2_data
 
 
 def get_dataset(args) -> Dict[str, np.ndarray]:

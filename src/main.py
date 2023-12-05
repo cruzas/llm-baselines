@@ -3,7 +3,7 @@ import numpy as np
 from models.utils import get_model
 from data.utils import get_dataset
 from optim.base import train_base
-from optim.sparse import train_sparse
+#from optim.sparse import train_sparse
 from optim.APTS_W import APTS_W
 from optim.TR import TR
 from torch.nn import functional as F
@@ -201,8 +201,8 @@ def main(rank, args, master_addr=None, master_port=None, world_size=None):
 
     if args.model == 'base': # all train functions have the same interface
         train = train_base
-    elif 'sparse' in args.model:
-        train = train_sparse
+    #elif 'sparse' in args.model:
+     #   train = train_sparse
     else:
         raise NotImplementedError(f"No training method implemented for model type '{args.model}'.")
 
@@ -228,7 +228,7 @@ if __name__ == "__main__":
     if not model_parallel:
         main(cmd_args)
     else:
-        world_size = torch.cuda.device_count() if torch.cuda.is_available() else 0
+        world_size = dist.get_world_size() if dist.is_initialized() else (torch.cuda.device_count() if torch.cuda.is_available() else 0)
         if world_size == 0:
             print("No CUDA device(s) detected.")
             exit(0)
