@@ -10,7 +10,7 @@ def parse_args(base_parser, args, namespace):
     parser.add_argument('--acc_steps', default=4, type=int)
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--device', default='cuda:0', type=str)
-    parser.add_argument('--iterations', default=int(1e4), type=int)
+    parser.add_argument('--iterations', default=2, type=int)
     parser.add_argument('--lr', default=2e-3, type=float)
     parser.add_argument('--warmup_percent', default=0.00, type=float)
     parser.add_argument('--weight_decay', default=1e-3, type=float)
@@ -37,6 +37,6 @@ def parse_args(base_parser, args, namespace):
     parser.add_argument('--bias', default=False, type=bool)
     parser.add_argument('--no_compile', action='store_true') # if true then model is not compiled 
     # Distributed args
-    parser.add_argument('--distributed_backend', default='gloo', type=str, required=False,
+    parser.add_argument('--distributed_backend', default='nccl', type=str, required=False,
                         choices=distributed.registered_backends())  # distributed backend type
     return parser.parse_args(args, namespace)

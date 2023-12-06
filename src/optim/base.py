@@ -11,7 +11,7 @@ from .utils import eval, get_batch, save_checkpoint
 def train_base(model, opt, data, scheduler, iterations, acc_steps, batch_size, sequence_length, eval_freq, ckpt_path, distributed_backend, extra_args):
     device_type = 'cuda' if 'cuda' in str(extra_args.device) else 'cpu'
     type_ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(
-        device_type=device_type, dtype=torch.bfloat16)  # extra_args.dtype)
+        device_type=device_type, dtype=torch.float32)  # extra_args.dtype)
     itr, substep, best_val_loss, text_table = 0, 0, float('inf'), None # best_val_loss not used atm, early stopping not recommended but possible 
 
     stats = {'train_loss': [], 'val_loss': [], 'val_pp': [], 'val_acc': []}
@@ -69,14 +69,14 @@ def train_base(model, opt, data, scheduler, iterations, acc_steps, batch_size, s
                 model.train()
                 t0 = time.time()
 
-    if distributed_backend.is_master_process():
-        print(f"saving checkpoint to {ckpt_path}")
-        save_checkpoint(distributed_backend=distributed_backend,
-                        model=model,
-                        opt=opt,
-                        scheduler=scheduler,
-                        itr=itr,
-                        ckpt_path=ckpt_path)
+    #if distributed_backend.is_master_process():
+        #print(f"saving checkpoint to {ckpt_path}")
+        #save_checkpoint(distributed_backend=distributed_backend,
+         #               model=model,
+          #              opt=opt,
+           #             scheduler=scheduler,
+            #            itr=itr,
+             #           ckpt_path=ckpt_path)
 
     return stats
 

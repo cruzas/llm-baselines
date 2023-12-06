@@ -332,11 +332,11 @@ class APTS_W(Optimizer):
             self.synchronize_global_to_local() # Synchronize the local models with global model parameters
             torch.cuda.empty_cache()
             
-            print(f'Rank {self.rank} - trainable layers {[p.requires_grad for p in self.model.parameters()]}')
-            print(f'Rank {self.rank} - param norm {torch.norm(torch.cat([p.flatten() for p in self.model.parameters()]), p=2)}')
+            #print(f'Rank {self.rank} - trainable layers {[p.requires_grad for p in self.model.parameters()]}')
+            #print(f'Rank {self.rank} - param norm {torch.norm(torch.cat([p.flatten() for p in self.model.parameters()]), p=2)}')
             loss, g, _ = self.local_steps(inputs, targets)
 
-            print(f'Rank {self.rank} - Preconditioenr: loss {loss}, param norm {torch.norm(torch.cat([p.flatten() for p in self.model.parameters()]), p=2)}')
+            #print(f'Rank {self.rank} - Preconditioenr: loss {loss}, param norm {torch.norm(torch.cat([p.flatten() for p in self.model.parameters()]), p=2)}')
             # sync the local models with the global model
             # print(f'Rank {self.rank}, Local steps took {time.time()-a} seconds')
             self.synchronize_new_params_to_rank0_local()
@@ -351,11 +351,11 @@ class APTS_W(Optimizer):
                             p.copy_(old_params[i])
 
                         step = list_linear_comb(1, list(self.model.parameters()), -1, old_params) # new_params - old_params
-                        print(f'GLOBAL-1: step norm {list_norm(step, p=2)}')
+                        #print(f'GLOBAL-1: step norm {list_norm(step, p=2)}')
                         step_norm = list_norm(step, p=torch.inf)
                         g = list_linear_comb(step_norm/list_norm(g, p=torch.inf), g) # g/torch.norm(g, p=torch.inf)
                         old_loss = self.closure(inputs, targets, self.global_model)
-                        print(f'GLOBAL 0 : param norm before sync {list_norm(list(self.global_model.parameters()), p=2)}')
+                        #print(f'GLOBAL 0 : param norm before sync {list_norm(list(self.global_model.parameters()), p=2)}')
                         with torch.no_grad():
                             for i,p in enumerate(self.global_model.parameters()):
                                 p.add_(step[i]) # update global model
@@ -364,12 +364,12 @@ class APTS_W(Optimizer):
                     if self.rank == 0:
                         
                         loss = self.closure(inputs, targets, self.global_model) # current loss
-                        print(f'GLOBAL 1 : loss {loss}, old_loss {old_loss} param norm after sync {list_norm(list(self.global_model.parameters()), p=2)}')
+                        #print(f'GLOBAL 1 : loss {loss}, old_loss {old_loss} param norm after sync {list_norm(list(self.global_model.parameters()), p=2)}')
                         radius = self.radius
                         w = 0; c = 0
                         while loss > old_loss: 
                             c += 1
-                            print(f'----------> Loss is increasing ({loss} > {old_loss}), reducing step size. W = '+ str(w))
+                            #print(f'----------> Loss is increasing ({loss} > {old_loss}), reducing step size. W = '+ str(w))
                             radius = radius/2
                             w = min(w + 0.2, 1)
                             step2 = list_linear_comb(1-w, step, w, g) 
@@ -382,7 +382,7 @@ class APTS_W(Optimizer):
                             if c > 5:
                                 print(f'Warning: APTS is not decreasing the loss {loss} > {old_loss}')
                                 break
-                        print(c)
+                        #print(c)
             elif not self.fdl:
                 # self.synchronize_local_to_global() # update global model
                 with torch.no_grad():
@@ -395,9 +395,9 @@ class APTS_W(Optimizer):
         # Global smoothing step 
         new_loss = 0
         if self.global_pass and self.rank == 0:
-            print(f'GLOBAL 2 - Preconditioenr: loss {new_loss}, param norm {list_norm(list(self.global_model.parameters()), p=2)}')
+            #print(f'GLOBAL 2 - Preconditioenr: loss {new_loss}, param norm {list_norm(list(self.global_model.parameters()), p=2)}')
             new_loss = self.global_optimizer.step(lambda dummy=1: self.global_closure(inputs, targets))[0]
-            print(f'GLOBAL 3 - Preconditioenr: loss {new_loss}, param norm {list_norm(list(self.global_model.parameters()), p=2)}')
+            #print(f'GLOBAL 3 - Preconditioenr: loss {new_loss}, param norm {list_norm(list(self.global_model.parameters()), p=2)}')
             self.radius = torch.tensor(self.global_optimizer.radius)
 
         self.radius = self.radius.to('cpu' if self.backend=='gloo' else 'cuda:0')
@@ -405,7 +405,7 @@ class APTS_W(Optimizer):
         dist.broadcast(self.radius, src=0) # Broadcast the radius
 
         # print(f'Iteration {self.iter} | initial loss: {initial_loss}, after local steps: {local_loss}, loss before global step {loss}, final loss {new_loss}') ##
-        print('-----------------------------------------------------------------------------------')
+        #print('-----------------------------------------------------------------------------------')
         if self.iter == 1:
             if skip_preconditioning:
                 print('Skipping preconditioning')

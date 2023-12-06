@@ -11,11 +11,23 @@ from .backend import DistributedBackend
 class DataParallelDistributedBackend(DistributedBackend):
 
     def __init__(self, args):
-        self.rank = int(os.environ.get('RANK', -1))
-        assert self.rank != -1, "DDP backend can not be used without rank"
-        assert "cuda" in args.device, "DDP backend can not be used on non-CUDA devices"
-        init_process_group(backend=args.distributed_backend)
-        self.local_rank = int(os.environ['LOCAL_RANK'])
+        #self.rank = int(os.environ.get('RANK', -1))
+        #assert self.rank != -1, "DDP backend can not be used without rank"
+        #assert "cuda" in args.device, "DDP backend can not be used on non-CUDA devices"
+        #init_process_group(backend=args.distributed_backend)
+        #self.local_rank = int(os.environ['LOCAL_RANK'])
+        os.environ['MASTER_ADDR'] = args.master_addr
+        os.environ['MASTER_PORT'] = args.master_port
+
+        self.rank = args.rank 
+        print(f"Rank {self.rank} set master port and address") 
+        assert self.rank != -1, "MP backend can not be used without rank"
+        assert "cuda" in args.device, "MP backend can not be used on non-CUDA devices"
+        print(f"Rank {self.rank} going to call init_process_group.")
+        print(f"Backend: {args.distributed_backend}, world size: {args.world_size}")
+        init_process_group(backend=args.distributed_backend, rank=args.rank, world_size=args.world_size)
+        print(f"Rank {self.rank} finished with init_process group.")
+        self.local_rank = args.rank
 
     def get_adjusted_args_for_process(self, args):
         effective_batch_size = args.batch_size * args.acc_steps

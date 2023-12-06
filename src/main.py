@@ -14,7 +14,7 @@ import torch.multiprocessing as mp
 
 def prepare_distributed_environment(rank, master_addr, master_port, world_size):
     device_id = 0
-    if rank is None and master_addr is None and master_port is None and world_size is None: # we are on a cluster
+    if True: #rank is None and master_addr is None and master_port is None and world_size is None: # we are on a cluster
         ## Execute code on a cluster
         os.environ["MASTER_PORT"] = "29501"
         os.environ["WORLD_SIZE"] = os.environ["SLURM_NNODES"]
@@ -110,11 +110,11 @@ def get_exp_name(args):
     return exp_name
 
 
-def main(rank, args, master_addr=None, master_port=None, world_size=None): 
+def main(rank=None, args=None, master_addr=None, master_port=None, world_size=None): 
     torch.backends.cuda.matmul.allow_tf32 = True # allows us to make sure we're able to use tensorfloat32 during training
     torch.backends.cudnn.allow_tf32 = True
 
-    # prepare_distributed_environment(rank, master_addr, master_port, world_size)
+    #prepare_distributed_environment(rank, master_addr, master_port, world_size)
     # args = {
     #     'master_addr': 'localhost',
     #     'master_port': '12345',
@@ -122,14 +122,16 @@ def main(rank, args, master_addr=None, master_port=None, world_size=None):
     #     'worldsize': 2
     # }
 
-    args.rank = rank
+    args.rank = int(os.environ["SLURM_NODEID"])
     distributed_backend = distributed.make_backend_from_args(args)
+    print(f"Rank {args.rank} finished making distributed backend.")
     args = distributed_backend.get_adjusted_args_for_process(args)
 
     args.device = torch.device(args.device)
+    print(f"Rank {rank} args.device {args.device}")
     device_type = "cuda" if "cuda" in str(args.device) else "cpu"
-    if device_type == "cuda":
-        torch.cuda.set_device(args.device)
+    #if device_type == "cuda":
+    #    torch.cuda.set_device(args.device)
 
     torch.manual_seed(args.seed)
     random.seed(args.seed)
@@ -171,9 +173,9 @@ def main(rank, args, master_addr=None, master_port=None, world_size=None):
     #     opt = torch.optim.SGD(group_specs, lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     # else: #APTS
     if rank==0:
-        opt = APTS_W(model.parameters(), model, model2, **get_apts_w_params(nr_models=2))
+        opt = APTS_W(model.parameters(), model, model2, **get_apts_w_params(nr_models=args.world_wize))
     else:
-        opt = APTS_W(model.parameters(), model, model2, **get_apts_w_params(nr_models=2))
+        opt = APTS_W(model.parameters(), model, model2, **get_apts_w_params(nr_models=args.world_size))
 
     
 
@@ -224,18 +226,24 @@ def main(rank, args, master_addr=None, master_port=None, world_size=None):
 
 if __name__ == "__main__":
     cmd_args = get_args()
-    model_parallel = True
-    if not model_parallel:
-        main(cmd_args)
-    else:
-        world_size = dist.get_world_size() if dist.is_initialized() else (torch.cuda.device_count() if torch.cuda.is_available() else 0)
-        if world_size == 0:
-            print("No CUDA device(s) detected.")
-            exit(0)
+    #model_parallel = True
+    #if not model_parallel:
+     #   main(cmd_args)
+    #else:
+    world_size = int(os.environ["SLURM_NNODES"])  #dist.get_world_size() if dist.is_initialized() else (torch.cuda.device_count() if torch.cuda.is_available() else 0)
+    if world_size == 0:
+        print("No CUDA device(s) detected.")
+        exit(0)
 
-        master_addr = 'localhost'
-        master_port = '12345'
-        cmd_args.master_addr = master_addr
-        cmd_args.master_port = master_port
-        cmd_args.world_size = world_size
-        mp.spawn(main, args=(cmd_args, master_addr, master_port, world_size), nprocs=world_size, join=True)
+    node_list = os.environ["SLURM_NODELIST"]
+    master_addr = subprocess.getoutput(
+        f"scontrol show hostname {node_list} | head -n1"
+    )
+    os.environ["MASTER_ADDR"] = master_addr
+    os.environ['MASTER_PORT'] = '12345'  # Example static port
+
+    cmd_args.master_addr = master_addr
+    cmd_args.master_port = os.environ['MASTER_PORT']
+    cmd_args.world_size = int(os.environ["SLURM_NNODES"])
+    #mp.spawn(main, args=(cmd_args, master_addr, master_port, world_size), nprocs=world_size, join=True)
+    main(args=cmd_args, master_addr=cmd_args.master_addr, master_port=cmd_args.master_port, world_size=cmd_args.world_size)

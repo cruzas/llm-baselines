@@ -10,7 +10,7 @@ else
 fi
 
 # Number of nodes
-num_nodes=2
+num_nodes=4
 
 cd "../" || exit
 if [[ $on_cluster == 1 ]]; then
