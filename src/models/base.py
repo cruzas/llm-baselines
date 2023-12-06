@@ -14,6 +14,7 @@ import tiktoken # pip install tiktoken
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+import torch.distributed as dist
 
 
 class LayerNorm(nn.Module):
@@ -182,11 +183,14 @@ class GPTBase(nn.Module):
             # if we are given some desired targets also calculate the loss
             logits = self.lm_head(x)
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
+            # let's use the standard cross-entropy loss, shall we?
+            # loss = torch.nn.CrossEntropyLoss()(logits.view(-1, logits.size(-1)), targets.view(-1))
         else:
             # inference-time mini-optimization: only forward the lm_head on the very last position
             logits = self.lm_head(x[:, [-1], :]) # note: using list [-1] to preserve the time dim
             loss = None
         logits = logits if get_logits else None
+        print(f'rank {dist.get_rank()} loss is leaf {loss.is_leaf}')
         return {'logits': logits, 'loss': loss}
 
     def crop_sequence_length(self, sequence_length):

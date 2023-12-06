@@ -6,11 +6,11 @@ import distributed
 def parse_args(base_parser, args, namespace):
     parser = base_parser
     # General training params
-    parser.add_argument('--batch_size', default=100, type=int)
-    parser.add_argument('--acc_steps', default=4, type=int)
+    parser.add_argument('--batch_size', default=4, type=int)
+    parser.add_argument('--acc_steps', default=1, type=int)
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--device', default='cuda:0', type=str)
-    parser.add_argument('--iterations', default=2, type=int)
+    parser.add_argument('--iterations', default=100, type=int)
     parser.add_argument('--lr', default=2e-3, type=float)
     parser.add_argument('--warmup_percent', default=0.00, type=float)
     parser.add_argument('--weight_decay', default=1e-3, type=float)
@@ -18,7 +18,7 @@ def parse_args(base_parser, args, namespace):
     parser.add_argument('--beta2', default=0.95, type=float)
     parser.add_argument('--scheduler', default='cos', choices=['linear', 'cos', 'none'])
     parser.add_argument('--opt', default='sgd', choices=['adamw', 'sgd'])
-    parser.add_argument('--eval_freq', default=10, type=int) # in iterations
+    parser.add_argument('--eval_freq', default=1, type=int) # in iterations
     parser.add_argument('--results_base_folder', default="./exps", type=str) 
     parser.add_argument('--grad_clip', default=0.0, type=float) # default value is 1.0 in NanoGPT
     # Dataset params
@@ -29,10 +29,10 @@ def parse_args(base_parser, args, namespace):
     parser.add_argument('--model', default='base', choices=['base', 'sparse-heads-q'])
     parser.add_argument('--use_pretrained', default="none", type=str) # 'none', 'gpt-2' or a path to the pretraind model
     parser.add_argument('--dropout', default=0.0, type=float)
-    parser.add_argument('--n_head', default=2, type=int)
-    parser.add_argument('--n_layer', default=2, type=int) # depths in att + ff blocks
-    parser.add_argument('--n_embd', default=32, type=int) # embedding size / hidden size ... 
-    parser.add_argument('--sequence_length', default=128, type=int)
+    parser.add_argument('--n_head', default=12, type=int)
+    parser.add_argument('--n_layer', default=24, type=int) # depths in att + ff blocks
+    parser.add_argument('--n_embd', default=768, type=int) # embedding size / hidden size ... 
+    parser.add_argument('--sequence_length', default=512, type=int)
     parser.add_argument('--dtype', default=torch.bfloat16, type=torch.dtype)
     parser.add_argument('--bias', default=False, type=bool)
     parser.add_argument('--no_compile', action='store_true') # if true then model is not compiled 

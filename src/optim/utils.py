@@ -3,7 +3,6 @@ import torch
 import torch.nn.functional as F
 from contextlib import nullcontext, contextmanager, ExitStack
 
-
 def get_batch(data, seq_length, batch_size, device='cpu'):
     ix = torch.randint(len(data) - seq_length, (batch_size,))
     x = torch.stack([torch.from_numpy((data[i:i+seq_length]).astype(np.int64)) for i in ix])

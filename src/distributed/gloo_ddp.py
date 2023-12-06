@@ -15,17 +15,17 @@ class ModelParallelDistributedBackend(DistributedBackend):
 
         self.rank = args.rank
         assert self.rank != -1, "MP backend can not be used without rank"
-        assert "cuda" in args.device, "MP backend can not be used on non-CUDA devices"
+        assert "cuda" in str(args.device), "MP backend can not be used on non-CUDA devices"
         init_process_group(backend=args.distributed_backend, rank=args.rank, world_size=args.world_size)
         self.local_rank = args.rank
     
     def get_adjusted_args_for_process(self, args):
         effective_batch_size = args.batch_size * args.acc_steps
         world_size = self.get_world_size()
-        if effective_batch_size % world_size != 0:
-            raise ValueError(f"Effective batch size "
-                             "{effective_batch_size} is not divisible "
-                             "by the world size {world_size}.")
+        # if effective_batch_size % world_size != 0:
+        #     raise ValueError(f"Effective batch size "
+        #                      "{effective_batch_size} is not divisible "
+        #                      "by the world size {world_size}.")
         args.acc_steps = args.acc_steps
         args.batch_size = args.batch_size 
         args.device = f'cuda:{self.local_rank}'

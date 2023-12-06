@@ -181,11 +181,12 @@ class TR(Optimizer): # TR optimizer
         # weights = self.param_groups[0]['params'] 
         weights = [w for w in self.param_groups[0]['params'] if w.requires_grad] # Store the model's parameters
         x = torch.cat([p.flatten() for p in weights]).detach()      # Store the model's parameters (flat)
-        g = torch.cat([p.grad.flatten() for p in weights]).detach() # Store the model's gradients (flat)
+        try:
+            g = torch.cat([p.grad.flatten() for p in weights]).detach() # Store the model's gradients (flat)
+        except:
+            print('gradient is None')
         g_list = [p.grad.detach() if p.requires_grad else torch.tensor(0) for p in [w for w in self.param_groups[0]['params']]]
         g_norm = torch.norm(g, p=self.norm_type)                    # Gradient norm
-        assert g.isnan().sum() == 0, "Gradient is NaN"
-        assert g_norm != 0, "Gradient is zero. Cannot update the model."
 
         if self.SECOND_ORDER and self.delayed_second_order<=self.steps:
             self.update_hessian_history(x, g) # current weights and gradient

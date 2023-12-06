@@ -40,7 +40,7 @@ class DataParallelDistributedBackend(DistributedBackend):
         args.acc_steps = args.acc_steps 
         args.batch_size = args.batch_size 
         args.device = f'cuda:0'
-        args.seed = args.seed + self.local_rank
+        args.seed = args.seed #+ self.local_rank
         return args
 
     def transform_model(self, model):
