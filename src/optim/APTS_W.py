@@ -74,7 +74,7 @@ class APTS_W(Optimizer):
                  global_pass=True,
                  forced_decreasing_loss=False,
                  shuffle_layers=False,
-                 sequential_derivative=2
+                 sequential_derivative=5
                  ):
 
         super(APTS_W, self).__init__(params, {})
@@ -186,12 +186,12 @@ class APTS_W(Optimizer):
             J_total = J.item()
 
         # print gradient norm:
-        if torch.is_grad_enabled():
-            print(f'Rank {self.rank} seq_der {sequential_derivative} - J_tot {J_total} - grad norm {list_norm([p.grad for p in model.parameters() if p.requires_grad is True], p=torch.inf)}')
-        else:
-            print(f'Rank {self.rank} seq_der {sequential_derivative} - J_tot {J_total}')
-        if sequential_derivative is not None:
-            self.closure( inputs, targets, model, sequential_derivative=None)
+        # if torch.is_grad_enabled():
+        #     print(f'Rank {self.rank} seq_der {sequential_derivative} - J_tot {J_total} - grad norm {list_norm([p.grad for p in model.parameters() if p.requires_grad is True], p=torch.inf)}')
+        # else:
+        #     print(f'Rank {self.rank} seq_der {sequential_derivative} - J_tot {J_total}')
+        # if sequential_derivative is not None:
+        #     self.closure( inputs, targets, model, sequential_derivative=None)
         return J_total
         
     # def restricted_global_params(self): # Remove in production
@@ -378,7 +378,7 @@ class APTS_W(Optimizer):
         One step of APTS
         '''
         self.iter += 1
-        skip_preconditioning = True
+        skip_preconditioning = False
         
         if skip_preconditioning is False: 
             self.synchronize_global_to_local() # Synchronize the local models with global model parameters
