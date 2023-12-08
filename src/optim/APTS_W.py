@@ -157,33 +157,42 @@ class APTS_W(Optimizer):
             # here we compute the derivative using microbatches to reduce memory usage
             model.zero_grad()
             micro_batch_size = inputs.shape[0] // sequential_derivative
+            J_total = 0
             for i in range(sequential_derivative):
                 if i == sequential_derivative - 1:
                     inp = inputs[i*micro_batch_size:]
                     tar = targets[i*micro_batch_size:]
                 else:
-                    inp = inputs[i*micro_batch_size:(i+1)*micro_batch_size]         # PROBLEMS HERE !!!  something is wrong with the slicing
+                    inp = inputs[i*micro_batch_size:(i+1)*micro_batch_size]        
                     tar = targets[i*micro_batch_size:(i+1)*micro_batch_size]
-                dict = self.model(inp, tar, False)
-                J = dict['loss']/sequential_derivative
-                print(f"Rank {self.rank} J is a leaf node: {J.is_leaf}")
-                # if J.is_leaf is False:
-                #     print('asd')
+
+                J = self.model(inp, tar, False)['loss']
+                
                 if torch.is_grad_enabled():
+                    # print(f"Rank {self.rank} J is a leaf node: {J.is_leaf}")
+                    J = J/sequential_derivative
                     J.backward()
                     torch.cuda.empty_cache()
+                J_total += J.item()
+                    
         else:
-            model.zero_grad()
             dict = model(inputs,targets,False)
             J = dict['loss'] 
             if torch.is_grad_enabled():
+                model.zero_grad()
+                # print(f"Rank {self.rank} J is a leaf node: {J.is_leaf}")
                 J.backward()
                 torch.cuda.empty_cache()
-        return J.item()
+            J_total = J.item()
+
+        #print gradient norm:
+        # if torch.is_grad_enabled():
+        #     print(f'Rank {self.rank} seq_der {sequential_derivative} - J_tot {J_total} - grad norm {list_norm([p.grad for p in model.parameters() if p.requires_grad is True], p=torch.inf)}')
+        return J_total
         
-    def restricted_global_params(self): # Remove in production
-        sub = list(self.model.parameters())
-        return torch.cat([p.flatten().detach() for i,p in enumerate(self.model.parameters()) if sub[i].requires_grad is True])
+    # def restricted_global_params(self): # Remove in production
+    #     sub = list(self.model.parameters())
+    #     return torch.cat([p.flatten().detach() for i,p in enumerate(self.model.parameters()) if sub[i].requires_grad is True])
         
     def local_model_params(self):
         return torch.cat([p.flatten().detach() for p in self.model.parameters() if p.requires_grad is True])
@@ -258,7 +267,7 @@ class APTS_W(Optimizer):
             
         grad_norm2 = 0
 
-        global_params_list = list(self.model.parameters())
+        global_params_list = [p for p in self.model.parameters() if p.requires_grad is True]
         for j in range(self.max_iter): # Iterations of the preconditioning step            
             self.local_optimizer.radius = lr
             self.local_optimizer.max_radius = lr            
@@ -278,7 +287,7 @@ class APTS_W(Optimizer):
                             g[i] = torch.tensor(0.0, device=send_device)
                         
             # Update radius to make sure the update is inside the global trust region radius
-            lr = self.radius - list_norm(list_linear_comb(1, self.restricted_global_params, -1, global_params_list), p=torch.inf)
+            lr = self.radius - list_norm(list_linear_comb(1, [p for p in self.model.parameters() if p.requires_grad is True], -1, global_params_list), p=torch.inf)
             if lr < torch.finfo(torch.get_default_dtype()).eps:
                 break
         print(f' Rank {self.rank} - local loss {local_loss} - grad norm {grad_norm2} - radius {self.radius} - lr {lr} - max_iter {j+1}')

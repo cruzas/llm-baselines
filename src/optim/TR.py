@@ -264,6 +264,7 @@ class TR(Optimizer): # TR optimizer
                     b = param.numel()
                     assert torch.isnan(x[a:a+b] - s[a:a+b]*s_incr).any() == False, "Nan in the update"
                     param.data.copy_(torch.reshape(x[a:a+b] - s[a:a+b]*s_incr, param.shape))
+                    param.requires_grad = True
                     a += b
 
                 # Compute the new loss

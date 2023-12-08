@@ -25,7 +25,7 @@ def train_base(model, opt, data, scheduler, iterations, acc_steps, batch_size, s
         # for microstep_idx in range(acc_steps):  # gradient accumulation
         #     x, y = get_batch(data['train'], sequence_length, batch_size, device=extra_args.device)
         #     with type_ctx:
-        #         with distributed_backend.get_context_for_microstep_forward(model=model, microstep_idx=microstep_idx, gradient_accumulation_steps=acc_steps):
+                # with distributed_backend.get_context_for_microstep_forward(model=model, microstep_idx=microstep_idx, gradient_accumulation_steps=acc_steps):
         #             outputs = model(x, targets=y)
 
             

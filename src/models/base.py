@@ -190,7 +190,7 @@ class GPTBase(nn.Module):
             logits = self.lm_head(x[:, [-1], :]) # note: using list [-1] to preserve the time dim
             loss = None
         logits = logits if get_logits else None
-        print(f'rank {dist.get_rank()} loss is leaf {loss.is_leaf}')
+        # print(f'rank {dist.get_rank()} loss is leaf {loss.is_leaf}')
         return {'logits': logits, 'loss': loss}
 
     def crop_sequence_length(self, sequence_length):
