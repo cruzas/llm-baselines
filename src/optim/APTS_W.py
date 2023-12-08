@@ -162,7 +162,7 @@ class APTS_W(Optimizer):
                     inp = inputs[i*micro_batch_size:]
                     tar = targets[i*micro_batch_size:]
                 else:
-                    inp = inputs[i*micro_batch_size:(i+1)*micro_batch_size]
+                    inp = inputs[i*micro_batch_size:(i+1)*micro_batch_size]         # PROBLEMS HERE !!!  something is wrong with the slicing
                     tar = targets[i*micro_batch_size:(i+1)*micro_batch_size]
                 dict = self.model(inp, tar, False)
                 J = dict['loss']/sequential_derivative
