@@ -64,7 +64,6 @@ class APTS_W(Optimizer):
     def __init__(self,
                  params,
                  model=None,
-                 model2=None,
                  device=None,
                  max_iter=2,
                  nr_models=None,
@@ -93,9 +92,9 @@ class APTS_W(Optimizer):
         self.fdl = bool(forced_decreasing_loss) # in case forced_decreasing_loss is 0 or 1
 
         if self.rank == 0:
-            self.global_model = model2
-            self.model = model if model is not None else copy.deepcopy(model2)
-            self.global_optimizer = global_opt(self.global_model.parameters(), **global_opt_params)
+            self.model = model
+            self.global_model_params = copy.deepcopy(list(model.parameters()))
+            self.global_optimizer = global_opt(self.global_model_params, **global_opt_params)
         else:
             self.model = model
 
@@ -317,50 +316,61 @@ class APTS_W(Optimizer):
                         g[layer] = g[layer].copy_(g2).to('cuda')
         return local_loss, g, grad_norm2
     
+    
     def synchronize_global_to_local(self):
+        '''
+        Synchronize the local models with global model parameters
+        '''
         with torch.no_grad():
             if self.rank == 0:
+                # Save the global model parameters
+                self.global_model_params = copy.deepcopy(list(self.model.parameters()))
                 # Send to other ranks
-                global_model_params_list = list(self.global_model.parameters())
-                dist.broadcast_object_list(global_model_params_list, src=0)
+                dist.broadcast_object_list(self.global_model_params, src=0)
 
-                # Update its own local model
-                for layer,p in enumerate(self.model.parameters()):  
-                    p.copy_(global_model_params_list[layer])
+                # Update the model on rank 0 to be the local model
+                for layer, p in enumerate(self.model.parameters()):  
                     if layer in self.rank2layer[self.rank]:
-                        p.requires_grad = True
+                        p.requires_grad = True  
                     else:
                         p.requires_grad = False
             else:
+                # Placeholder to receive global parameters
                 params_list = list(self.model.parameters())
+                # Receive update global parameters from rank 0
                 dist.broadcast_object_list(params_list, src=0)
-                for layer,p in enumerate(self.model.parameters()):
+                for layer, p in enumerate(self.model.parameters()):
                     p.copy_(params_list[layer])
-                    if layer not in self.rank2layer[self.rank]:
+                    if layer in self.rank2layer[self.rank]: # Trainable layer locally
+                        p.requires_grad = True 
+                    else: # Non-trainable layer locally
                         p.requires_grad = False
-                    else:
-                        p.requires_grad = True
-            
+        # Ensure all processes have reached this point
         dist.barrier()
             
-
-    def synchronize_new_params_to_rank0_local(self):
+    def synchronize_local_to_global(self):
         with torch.no_grad():
-            if self.rank != 0:
+            if self.rank == 0:
+                for i in range(1, self.nr_models):
+                    for layer, p in enumerate(self.model.parameters()):
+                        if layer in self.rank2layer[i]:
+                            orig_device = p.device
+                            receive_device = 'cpu' if self.backend == 'gloo' else p.device
+                            # layer_from_i = torch.zeros_like(p).to(receive_device)
+                            dist.recv(p.to(receive_device), src=i, tag=layer)
+                            p.copy_(p.to(orig_device))
+                            # dist.recv(layer_from_i, src=i, tag=layer)
+                            # assert p.shape == layer_from_i.shape
+                            # p.copy_(layer_from_i) # TODO: test if this modifies things
+                            p.requires_grad = True
+                            # p = p.to(orig_device) <- this needs further testing TODO
+            else:
                 for layer, p in enumerate(self.model.parameters()):
                     if layer in self.rank2layer[self.rank]:
                         send_device = 'cpu' if self.backend == 'gloo' else p.device
                         dist.send(p.to(send_device), dst=0, tag=layer)
-            else:
-                for i in range(1, self.nr_models):
-                    for layer, p in enumerate(self.model.parameters()):
-                        if layer in self.rank2layer[i]:
-                            receive_device = 'cpu' if self.backend == 'gloo' else p.device
-                            layer_from_i = torch.zeros_like(p).to(receive_device)
-                            dist.recv(layer_from_i, src=i, tag=layer)
-                            assert p.shape == layer_from_i.shape
-                            p.copy_(layer_from_i) # TODO: test if this modifies things
-                            p.requires_grad = True
+
+        # Ensure all processes have reached this point
         dist.barrier()
     
     def step(self, inputs, targets):  
@@ -369,85 +379,71 @@ class APTS_W(Optimizer):
         '''
         self.iter += 1
         skip_preconditioning = True
-        if skip_preconditioning is False:
-            self.local_optimizers_sync() # Sharing weights of the global NN with the local ones
-            #check if every parameter is a leaf node
-            # print(f'1 rank {self.rank} - is every parameter a leaf node? {all([p.is_leaf for p in self.model.parameters()])}')
-            self.synchronize_global_to_local() # Synchronize the local models with global model parameters
-            # torch.cuda.empty_cache()
-            # print(f'2 rank {self.rank} - is every parameter a leaf node? {all([p.is_leaf for p in self.model.parameters()])}')
-            #print(f'Rank {self.rank} - trainable layers {[p.requires_grad for p in self.model.parameters()]}')
-            #print(f'Rank {self.rank} - param norm {torch.norm(torch.cat([p.flatten() for p in self.model.parameters()]), p=2)}')
-            loss, g, _ = self.local_steps(inputs, targets)
-            # print(f'3 rank {self.rank} - is every parameter a leaf node? {all([p.is_leaf for p in self.model.parameters()])}')
-
-            #print(f'Rank {self.rank} - Preconditioenr: loss {loss}, param norm {torch.norm(torch.cat([p.flatten() for p in self.model.parameters()]), p=2)}')
-            # sync the local models with the global model
-            # print(f'Rank {self.rank}, Local steps took {time.time()-a} seconds')
-            if self.rank == 0:
-                with torch.no_grad():
-                    print(f'1 - param norm {list_norm(list(self.global_model.parameters()), p=2)}')
-                    old_loss = self.closure(inputs, targets, self.global_model, self.sequential_derivative)
-                    print(f'2 - param norm {list_norm(list(self.global_model.parameters()), p=2)}')
-            self.synchronize_new_params_to_rank0_local()
-            if self.rank == 0:
-                with torch.no_grad():
-                    print(f'3 - param norm {list_norm(list(self.global_model.parameters()), p=2)}')
-                    old_loss = self.closure(inputs, targets, self.global_model, self.sequential_derivative)
-                    print(f'4 - param norm {list_norm(list(self.global_model.parameters()), p=2)}')
-
         
-            # check that the loss is decreasing
+        if skip_preconditioning is False: 
+            self.synchronize_global_to_local() # Synchronize the local models with global model parameters
+            if self.rank == 0 and self.fdl: # Here self.model is the global model
+                old_loss = self.closure(inputs, targets, self.model, self.sequential_derivative)
+                
+            # Compute local losses, global gradient at the previous iteration and new local params
+            loss, g, _ = self.local_steps(inputs, targets) 
+            
+            # Check that the loss is decreasing
             with torch.no_grad():
-                if self.fdl: # TODO: make this parallel, do some dogleg iterations  in parallel and only keep the longest step which satisfies the decreasing loss condition
-                    if self.rank == 0:
-                        old_params = list(self.global_model.parameters())
-                        step = list_linear_comb(1, list(self.model.parameters()), -1, old_params) # new_params - old_params
+                self.synchronize_local_to_global() # Update self.model with new params from "local trained models" -> global_model_params = old params
+                if self.fdl: # TODO: make this parallel, do some dogleg iterations in parallel and only keep the longest step which satisfies the decreasing loss condition
+                    if self.rank == 0:        
+                        # Compute step and step norm
+                        step = list_linear_comb(1, list(self.model.parameters()), -1, self.global_model_params) # new global params - old global params                
                         step_norm = list_norm(step, p=torch.inf)
-                        g = list_linear_comb(step_norm/list_norm(g, p=torch.inf), g) # g/torch.norm(g, p=torch.inf)
-                        for i,p in enumerate(self.global_model.parameters()):
-                            p.requires_grad = True
+
+                        # Compute gradient scaled by step norm, so that in Dogleg, both have a similar contribution
+                        g = list_linear_comb(step_norm/list_norm(g, p=torch.inf), g) 
                         
-                        old_loss = self.closure(inputs, targets, self.global_model, self.sequential_derivative)
-                        #print(f'GLOBAL 0 : param norm before sync {list_norm(list(self.global_model.parameters()), p=2)}')
-                        for i,p in enumerate(self.global_model.parameters()):
-                            p.add_(step[i]) # update global model
-                            p.requires_grad = True
-                                        
-                        loss = self.closure(inputs, targets, self.global_model, self.sequential_derivative) # current loss
-                        #print(f'GLOBAL 1 : loss {loss}, old_loss {old_loss} param norm after sync {list_norm(list(self.global_model.parameters()), p=2)}')
+                        # Compute new loss
+                        new_loss = self.closure(inputs, targets, self.model, self.sequential_derivative)
+
+                        # Compute the dogleg step with the hope that new_loss <= old_loss
                         radius = self.radius
                         w = 0; c = 0
-                        while loss > old_loss: 
+                        while new_loss > old_loss: 
                             c += 1
-                            #print(f'----------> Loss is increasing ({loss} > {old_loss}), reducing step size. W = '+ str(w))
+                            # Decrease radius to decrease size of step...
                             radius = radius/2
+                            # ... while moving towards the steepest descent direction (-g)
                             w = min(w + 0.2, 1)
-                            step2 = list_linear_comb(1-w, step, w, g) 
-                            step2 = list_linear_comb(1/list_norm(step2, p=torch.inf), step2)
-                            new_params = list_linear_comb(1, old_params, 1, step2)
-                            for i,p in enumerate(self.global_model.parameters()):
+                            step2 = list_linear_comb(1-w, step, -w, g) 
+                            # The step length is "radius", with   radius <= self.radius   (global TR radius)
+                            step2 = list_linear_comb(radius/list_norm(step2, p=torch.inf), step2)
+                            
+                            # Compute new global params, summing the old params with the new step
+                            new_params = list_linear_comb(1, self.global_model_params, 1, step2)
+                            # Update the model with the new params
+                            for i,p in enumerate(self.model.parameters()):
                                 p.copy_(new_params[i])
-                                p.requires_grad = True
-                            loss = self.closure(inputs, targets, self.global_model, self.sequential_derivative)
+                                p.requires_grad = True # Just making sure not to lose the differentiability of the model
+                                
+                            # Compute new global loss
+                            new_loss = self.closure(inputs, targets, self.model, self.sequential_derivative)
+                            # Empty cache to avoid memory problems
                             torch.cuda.empty_cache()
                             if c > 5:
-                                print(f'Warning: APTS is not decreasing the loss {loss} > {old_loss}')
+                                # In this case, we did not manage to decrease the global loss compared to the old global loss after 5 iterations (steep descent direction)
+                                print(f'Warning: APTS is not decreasing the loss {new_loss} > {old_loss}')
                                 break
-                        print(f' FDL : loss {loss} - old loss {old_loss} - c {c}')
-                elif not self.fdl:
-                    for i,p in enumerate(self.global_model.parameters()):
-                        p.add_(step[i])
-                        p.requires_grad = True
-                    
+                        print(f' FDL : loss {new_loss} - old loss {old_loss} - c {c}')
+        else:
+            print('Skipping preconditioning')
+            
+        # Empty cache to avoid memory problems
         torch.cuda.empty_cache()
+        # Ensure all processes have reached this point
         dist.barrier()
-        # Global smoothing step 
+        # ------------------------------- Global smoothing step -------------------------------
         new_loss = 0
         if self.global_pass and self.rank == 0:
-            #print(f'GLOBAL 2 - Preconditioenr: loss {new_loss}, param norm {list_norm(list(self.global_model.parameters()), p=2)}')
-            new_loss = self.global_optimizer.step(lambda dummy=1: self.closure(inputs, targets, self.global_model, self.sequential_derivative))[0]
-            #print(f'GLOBAL 3 - Preconditioenr: loss {new_loss}, param norm {list_norm(list(self.global_model.parameters()), p=2)}')
+            self.global_optimizer.param_groups[0]['params'] = list(self.model.parameters())
+            new_loss = self.global_optimizer.step(lambda dummy=1: self.closure(inputs, targets, self.model, self.sequential_derivative))[0]
             self.radius = torch.tensor(self.global_optimizer.radius)
 
         self.radius = self.radius.to('cpu' if self.backend=='gloo' else 'cuda:0')

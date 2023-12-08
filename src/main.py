@@ -116,10 +116,10 @@ def main(rank=None, args=None, master_addr=None, master_port=None, world_size=No
     print(f"Num validation tokens: {len(data['val'])}")
     
     model = get_model(args).to(args.device) # todo: take care of initializing the model if args.use_pretrained != 'none'
-    torch.manual_seed(args.seed)
-    model2 = get_model(args).to(args.device)
+    # torch.manual_seed(args.seed)
+    # model2 = get_model(args).to(args.device)
     
-    opt = APTS_W(model.parameters(), model, model2, **get_apts_w_params(nr_models=args.world_size))
+    opt = APTS_W(model.parameters(), model, **get_apts_w_params(nr_models=args.world_size))
 
     args.world_size = distributed_backend.get_world_size()
     exp_name = get_exp_name(args)
