@@ -11,7 +11,7 @@ from .utils import eval, get_batch, save_checkpoint
 def train_base(model, opt, data, scheduler, iterations, acc_steps, batch_size, sequence_length, eval_freq, ckpt_path, distributed_backend, extra_args):
     device_type = 'cuda' if 'cuda' in str(extra_args.device) else 'cpu'
     type_ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(
-        device_type=device_type, dtype=torch.float16)  # extra_args.dtype)
+        device_type=device_type, dtype=torch.bfloat16)  # extra_args.dtype)
     itr, substep, best_val_loss, text_table = 0, 0, float('inf'), None # best_val_loss not used atm, early stopping not recommended but possible 
 
     stats = {'train_loss': [], 'val_loss': [], 'val_pp': [], 'val_acc': []}
@@ -25,7 +25,7 @@ def train_base(model, opt, data, scheduler, iterations, acc_steps, batch_size, s
         # for microstep_idx in range(acc_steps):  # gradient accumulation
         #     x, y = get_batch(data['train'], sequence_length, batch_size, device=extra_args.device)
         #     with type_ctx:
-                # with distributed_backend.get_context_for_microstep_forward(model=model, microstep_idx=microstep_idx, gradient_accumulation_steps=acc_steps):
+        #         with distributed_backend.get_context_for_microstep_forward(model=model, microstep_idx=microstep_idx, gradient_accumulation_steps=acc_steps):
         #             outputs = model(x, targets=y)
 
             

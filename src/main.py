@@ -12,6 +12,7 @@ import subprocess
 import torch.multiprocessing as mp
 
 
+
 def get_apts_w_params(momentum=False, second_order=False, nr_models=2, max_iter=5, fdl=True, global_pass=True, device=None):
     TR_APTS_W_PARAMS_GLOBAL = {
         "radius": 0.01, #0.1,
@@ -19,7 +20,6 @@ def get_apts_w_params(momentum=False, second_order=False, nr_models=2, max_iter=
         "min_radius": 0.0001,
         "decrease_factor": 0.5,
         "increase_factor": 2.0,
-        "is_adaptive": False,
         "second_order": second_order,
         "delayed_second_order": 0,
         "device": device,
@@ -39,7 +39,6 @@ def get_apts_w_params(momentum=False, second_order=False, nr_models=2, max_iter=
         "min_radius": 0,  # based on APTS class
         "decrease_factor": 0.5,
         "increase_factor": 2.0,
-        "is_adaptive": False,
         "second_order": second_order,
         "delayed_second_order": 0,
         "device": device,
@@ -54,7 +53,6 @@ def get_apts_w_params(momentum=False, second_order=False, nr_models=2, max_iter=
     }
 
     APTS_W_PARAMS = {
-        "device": device,
         "max_iter": max_iter,
         "nr_models": nr_models,
         "global_opt": TR,
@@ -88,6 +86,7 @@ def get_exp_name(args):
 def main(rank=None, args=None, master_addr=None, master_port=None, world_size=None): 
     torch.backends.cuda.matmul.allow_tf32 = True # allows us to make sure we're able to use tensorfloat32 during training
     torch.backends.cudnn.allow_tf32 = True
+    # torch.set_default_dtype(torch.float16)
 
     args.rank = int(os.environ["SLURM_NODEID"]) if rank == None else rank
     args.device = 'cuda:0' if args.distributed_backend == 'nccl' else torch.device(f'cuda:{args.rank}')

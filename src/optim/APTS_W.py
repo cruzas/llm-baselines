@@ -64,7 +64,6 @@ class APTS_W(Optimizer):
     def __init__(self,
                  params,
                  model=None,
-                 device=None,
                  max_iter=2,
                  nr_models=None,
                  global_opt=None,
@@ -74,7 +73,8 @@ class APTS_W(Optimizer):
                  global_pass=True,
                  forced_decreasing_loss=False,
                  shuffle_layers=False,
-                 sequential_derivative=5
+                 sequential_derivative=None,
+                 loss_fn=torch.nn.CrossEntropyLoss
                  ):
 
         super(APTS_W, self).__init__(params, {})
@@ -83,6 +83,7 @@ class APTS_W(Optimizer):
         self.rank = dist.get_rank()
         with torch.no_grad():
             self.tot_layers = len(list(model.parameters()))
+        self.loss_fn = loss_fn()
         self.backend = dist.get_backend()
         self.sequential_derivative = sequential_derivative
         self.max_iter = max_iter
@@ -104,10 +105,6 @@ class APTS_W(Optimizer):
         self.rank2layer, self.layer2rank = self.define_trainable_layers(shuffle=shuffle_layers)
         self.set_trainable_layers()
         self.restricted_global_params = [torch.tensor(0)]*self.tot_layers
-        # params_list = list(self.model.parameters())
-        # idx_range = range(self.tot_layers) if self.rank == 0 else self.rank2layer[self.rank]
-        # for layer in idx_range:
-        #     self.restricted_global_params[layer] = params_list[layer].clone().detach()
 
         if 'TR' in str(local_opt):
             local_opt_params['min_radius'] = 0 # avoids problems with "radius" being smallers than "min_radius"
@@ -167,8 +164,15 @@ class APTS_W(Optimizer):
                 else:
                     inp = inputs[i*micro_batch_size:(i+1)*micro_batch_size]        
                     tar = targets[i*micro_batch_size:(i+1)*micro_batch_size]
-                dict = self.model(inp, tar, False)
-                J = dict['loss']
+                    
+                type_ctx = torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16)
+                with type_ctx:
+                    output = self.model(inp, tar)
+                    if isinstance(output, dict): # This is needed for LLMs 
+                        J = output['loss']
+                    else:
+                        J = self.loss_fn(output, tar)
+
                 J = J/sequential_derivative
                 J_total += J.item()
                 if torch.is_grad_enabled():
@@ -176,8 +180,14 @@ class APTS_W(Optimizer):
                     J.backward()
                     torch.cuda.empty_cache()    
         else:
-            dict = model(inputs,targets,False)
-            J = dict['loss'] 
+            type_ctx = torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16)
+            with type_ctx:
+                output = model(inputs,targets)
+                if isinstance(output, dict): # This is needed for LLMs 
+                    J = output['loss']
+                else:
+                    J = self.loss_fn(output, tar)
+
             if torch.is_grad_enabled():
                 model.zero_grad()
                 # print(f"Rank {self.rank} J is a leaf node: {J.is_leaf}")
