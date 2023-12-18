@@ -1,5 +1,5 @@
 import torch
-from torch.optim.optimizer import Optimizer
+from torch.optim.optimizer import Optimizera
 import torch.distributed as dist # For parallel training
 import numpy as np
 import time

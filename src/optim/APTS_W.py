@@ -310,6 +310,8 @@ class APTS_W(Optimizer):
         print(f' Rank {self.rank} - OLD_LOSS {OLD_LOSS} - local loss {local_loss} - grad norm {grad_norm2} - radius {self.radius} - lr {lr} - max_iter {j+1}')
         # Collect the gradients from local models
         # print(f'Rank {self.rank} - norm gradient {list_norm(g, p=2)}')
+        # TODO: https://chat.openai.com/share/0b9fd09a-3d18-448b-b9ba-24d29d3fa622
+        # https://pytorch.org/docs/stable/distributed.html#torch.distributed.irecv
         if self.rank != 0:
             for layer in self.rank2layer[self.rank]:
                 send_device = 'cpu' if self.backend == 'gloo' else g[layer].device
